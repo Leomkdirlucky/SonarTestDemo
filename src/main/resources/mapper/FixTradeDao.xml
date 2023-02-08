@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.fixdemo.dao.FixTradeDao">
+    <select id="queryOrderSubGoodsPrice" resultType="cn.hutool.json.JSONObject">
+        SELECT b.good_code AS parent_code, d.good_code AS sub_good_code, d.sell_price
+        FROM car_shoporder_detail a
+                 INNER JOIN car_order_detail d ON a.order_no = d.order_no AND a.station_id = d.station_id
+                 INNER JOIN car_goodsinfo b ON a.good_id = b.id AND a.station_id = b.station_id
+                 LEFT JOIN car_goodsunit c ON b.good_code = c.good_code AND b.station_id = c.station_id
+        WHERE a.station_id = #{stationId}
+          AND e.trade_no = #{tradeNo}
+        GROUP BY d.good_code;
+    </select>
+
+    <select id="queryShopOrderDetail" resultType="cn.hutool.json.JSONObject">
+        SELECT a.good_id,
+               a.good_count,
+               b.good_code AS parent_code,
+               a.total_money,
+               a.discount_fee,
+               a.online_discount_fee,
+               a.total_fee,
+               b.sell_price,
+               c.sub_good_code,
+               c.unit_times
+        FROM car_shoporder_detail a
+                 INNER JOIN car_order_detail d ON a.order_no = d.order_no AND a.station_id = d.station_id
+                 INNER JOIN car_goodsinfo b ON a.good_id = b.id AND a.station_id = b.station_id
+                 LEFT JOIN car_goodsunit c ON b.good_code = c.good_code AND b.station_id = c.station_id
+        WHERE a.station_id = #{stationId}
+          AND d.trade_no = #{tradeNo}
+    </select>
+
+    <select id="queryGroupGoodsList" resultType="cn.hutool.json.JSONObject">
+        SELECT b.good_code, d.good_code, c.unit_times, d.sell_price
+        FROM car_shoporder_detail a
+                 INNER JOIN car_order_detail e ON a.order_no = e.order_no AND a.station_id = e.station_id
+                 INNER JOIN car_goodsinfo b ON a.good_id = b.id AND a.station_id = b.station_id
+                 LEFT JOIN car_goodsunit c ON b.good_code = c.good_code AND b.station_id = c.station_id
+                 INNER JOIN car_goodsinfo d ON c.sub_good_code = d.good_code AND c.station_id = d.station_id
+        WHERE a.station_id = #{stationId}
+          AND e.trade_no = #{tradeNo}
+          AND a.good_id = #{goodId}
+        GROUP BY b.good_code, d.good_code;
+    </select>
+
+    <select id="queryRepeatShopOrder" resultType="string">
+        SELECT a.trade_no
+        FROM car_order_discount a
+                 LEFT JOIN (SELECT COUNT(*) total, trade_no
+                            FROM car_order_discount
+                            WHERE station_id = #{stationId}
+                              AND classtype = 1
+                              AND order_type = 2
+                              AND valid = 1
+                              AND add_datetime BETWEEN #{beginTime} AND #{endTime}
+                            GROUP BY trade_no) b ON a.trade_no = b.trade_no
+        WHERE b.total > 1
+        GROUP BY a.trade_no
+    </select>
+
+    <select id="queryRepeatShopOrder1" resultType="string">
+        SELECT trade_no
+        FROM car_order_discount
+        WHERE station_id = #{stationId}
+          AND classtype = 1
+          AND order_type = 2
+          AND valid = 1
+          AND add_datetime BETWEEN #{beginTime} AND #{endTime}
+          AND ext_info != ''
+        GROUP BY trade_no
+    </select>
+
+    <select id="queryShopOrderDetail1" resultType="cn.hutool.json.JSONObject">
+        SELECT a.good_id, b.good_code, a.total_money, a.good_count, a.good_id
+        FROM car_shoporder_detail a
+                 INNER JOIN car_goodsinfo b ON a.good_id = b.id
+        WHERE a.order_no = #{orderNo}
+    </select>
+
+    <select id="queruR1Goods" resultType="cn.hutool.json.JSONObject">
+        SELECT TOP 100 PERCENT bpm.Name,bpm.ProductCode,
+               bpm.BarCode,
+               temp1.amount,
+               bpm.DefaultPrice,
+               temp2.PreferentialPrice,
+               bdm_bpm.Name        AS Name1,
+               bdm_bpm.ProductCode AS ProductCode1,
+               bdm.Amount          AS amount1,
+               bdm.Price           AS price1
+        FROM BaseProductMaster bpm
+                 INNER JOIN (
+            SELECT TOP 100 PERCENT COUNT ( sodm.Amount ) AS amount,
+	sodm.TheBaseProductMaster
+            FROM
+                SalesOrderMaster som
+                INNER JOIN SalesOrderDetailMaster sodm
+            ON som.ID = sodm.TheSalesOrderMaster
+            WHERE
+                som.CreatedDate >= '2022-10-01 00:00:00'
+            GROUP BY
+                sodm.TheBaseProductMaster) temp1 ON bpm.ID = temp1.TheBaseProductMaster
+                 INNER JOIN (
+            SELECT inner_t1.TheBaseProductMaster, inner_t1.PreferentialPrice
+            FROM SaleableProduct inner_t1,
+                 (SELECT TheBaseProductMaster, MAX(UpdatedDate) AS UpdatedDate
+                  FROM SaleableProduct
+                  GROUP BY TheBaseProductMaster) inner_t2
+            WHERE inner_t1.TheBaseProductMaster = inner_t2.TheBaseProductMaster
+              AND inner_t1.UpdatedDate = inner_t2.UpdatedDate
+        ) temp2 ON bpm.ID = temp2.TheBaseProductMaster
+                 LEFT JOIN BundlingDetailMaster bdm ON bpm.ID = bdm.TheBundlingMaster
+                 LEFT JOIN BaseProductMaster bdm_bpm ON bdm.TheProductMaster = bdm_bpm.ID
+        ORDER BY temp1.amount DESC
+    </select>
+
+    <select id="queryShiftShopFee" resultType="cn.hutool.json.JSONObject">
+        SELECT SUM(c.discount_fee)        as discount,
+               SUM(c.online_discount_fee) as onlineDiscount,
+               SUM(c.total_fee)           as totalFee
+        FROM car_order_detail a
+                 INNER JOIN car_mix_payorder b ON a.trade_no = b.trade_no
+                 INNER JOIN car_shoporder c ON a.order_no = c.order_no
+        WHERE a.station_id = #{stationId}
+          AND a.trade_state = 5
+          AND b.shift_id = #{shiftId};
+    </select>
+
+    <select id="queryOrderForFixBuyPrice" resultType="com.example.fixdemo.entity.CarShoporderDetail">
+        SELECT *
+        FROM car_shoporder_detail
+        WHERE order_no IN (
+            SELECT order_no
+            FROM car_shoporder_detail a
+            WHERE a.station_id = #{stationId}
+              and a.trade_state in (5,7)
+              and a.add_datetime >= #{addDatetime}
+            GROUP BY order_no
+            HAVING COUNT(*) > 1)
+    </select>
+
+    <select id="queryStockBuyPriceToFix" resultType="cn.hutool.json.JSONObject">
+        SELECT a.stock_mainkey,
+               a.good_code,
+               a.buy_price,
+               c.id
+        FROM car_goodstock_batch a
+                 INNER JOIN car_goodsrecord_change b ON a.stock_mainkey = b.mainkey
+            AND a.good_code = b.good_code
+                 INNER JOIN car_goodsinfo c ON a.good_code = c.good_code AND a.station_id = c.station_id
+        WHERE a.station_id = #{stationId}
+          AND b.order_code = #{orderNo}
+          AND b.recode_type = 1
+          AND b.change_type = 1
+    </select>
+
+    <select id="queryUnitForFixBuyPrice" resultType="cn.hutool.json.JSONObject">
+        SELECT a.good_code,
+               a.sub_good_code,
+               a.unit_times
+        FROM car_goodsunit a
+                 INNER JOIN car_goodsinfo b ON a.good_code = b.good_code
+            AND a.station_id = b.station_id
+        WHERE a.station_id = #{stationId}
+          AND b.id = #{goodId} limit 1
+    </select>
+</mapper>
